@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Entry point for incoming REST API calls for path/resource "/tinyUrl".
+ * Entry point for incoming REST API calls for resource "/tinyUrl".
  */
 @RestController
 public class TinyUrlRestController {
@@ -72,8 +72,7 @@ public class TinyUrlRestController {
 
             logger.info("returning newMapping.getId(): {}, shortUrl: {}", newMapping.getId(), shortUrl);
             return new ResponseEntity<>(
-                new UrlMappingPojo().withShortUrl(shortUrl).withLongUrl(longUrl)
-                    .withMessage("success").witHttpStatusCode(HttpStatus.OK),
+                new UrlMappingPojo().withShortUrl(shortUrl).withLongUrl(longUrl),
                 HttpStatus.OK);
 
         } catch (Exception e) {
@@ -104,7 +103,11 @@ public class TinyUrlRestController {
                                                              String userCorrelationId) {
         String correlationId = Strings.isNotEmpty(userCorrelationId) ? userCorrelationId : UUID.randomUUID().toString();
         ThreadContext.put("correlation-id", correlationId);
-        logger.info("shortUrl: {}, correlationId: {}", shortUrl, correlationId);
+        // FIXME: If traffic is high, logging every call at info level can cost money for log/event processing.
+        //        Put a debug level log so we can get it if needed without deploying code with new logs.
+        if (logger.isDebugEnabled()) {
+            logger.debug("shortUrl: {}, correlationId: {}", shortUrl, correlationId);
+        }
         try {
             long id = NumToStrBijectiveConverter.strToNum(shortUrl);
             UrlMapping resolvedUrlMapping = repository.findById(id).orElse(null);
@@ -117,10 +120,12 @@ public class TinyUrlRestController {
                         .witHttpStatusCode(HttpStatus.NOT_FOUND),
                     HttpStatus.NOT_FOUND);
             }
-            logger.info("resolved to: resolvedUrlMapping: {}", resolvedUrlMapping);
+
+            if (logger.isDebugEnabled()) {
+                logger.debug("resolved to: resolvedUrlMapping: {}", resolvedUrlMapping);
+            }
             return new ResponseEntity<>(
-                new UrlMappingPojo().withLongUrl(resolvedUrlMapping.getLongUrl()).withShortUrl(shortUrl)
-                    .withMessage("success").witHttpStatusCode(HttpStatus.OK),
+                new UrlMappingPojo().withLongUrl(resolvedUrlMapping.getLongUrl()).withShortUrl(shortUrl),
                 HttpStatus.OK);
         } catch (Exception e) {
             logger.error("Unexpected exception handling shortUrl: '{}'", shortUrl, e);
