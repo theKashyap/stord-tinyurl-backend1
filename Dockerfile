@@ -14,6 +14,6 @@ RUN ls -al /tinyurl-backend/
 FROM openjdk:8-jdk-alpine
 ARG JAR_FILE=target/*.jar
 COPY ${JAR_FILE} /tinyurl-backend/app.jar
-ENTRYPOINT ["java","-jar","/tinyurl-backend/app.jar"]
+ENTRYPOINT java -jar /tinyurl-backend/app.jar
 
-# EXPOSE 8081
+EXPOSE 7700

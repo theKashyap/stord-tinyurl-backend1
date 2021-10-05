@@ -44,6 +44,6 @@ public class NumToStrBijectiveConverter {
     }
 
     private NumToStrBijectiveConverter() {
+        // Use static methods. No instance needed.
     }
-
 }

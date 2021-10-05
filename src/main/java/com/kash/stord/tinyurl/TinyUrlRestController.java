@@ -7,7 +7,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.ThreadContext;
 import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,8 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class TinyUrlRestController {
     private static final Logger logger = LogManager.getLogger();
     private final TinyUrlRepository repository;
-    @Value("${com.kash.tinyurl.host:http://localhost:9090}")
-    private String authority;
 
     @Autowired
     public TinyUrlRestController(TinyUrlRepository repo) {
@@ -56,9 +53,9 @@ public class TinyUrlRestController {
         // FIXME: In a boundary function like this, always provide a log at entry and all exits with as many
         //        variables/params as possible.
         logger.info("body: {}, correlationId: {}", body, correlationId);
-        String longUrl = body.longUrl;
 
         try {
+            String longUrl = body.longUrl;
             if (!UrlValidator.getInstance().isValid(longUrl)) {
                 // FIXME: Would be nice to specify what's wrong with URL and not just say it's bad URL.
                 //        But there is not standard validator and Apache one only returns bool.
@@ -72,11 +69,10 @@ public class TinyUrlRestController {
 
             UrlMapping newMapping = repository.save(new UrlMapping(longUrl));
             String shortUrl = NumToStrBijectiveConverter.numToStr(newMapping.getId());
-            String qualifiedShortUrl = String.format("%s/%s", authority, shortUrl);
-            logger.info("newMapping.getId(): {}, qualifiedShortUrl: {}", newMapping.getId(), qualifiedShortUrl);
 
+            logger.info("returning newMapping.getId(): {}, shortUrl: {}", newMapping.getId(), shortUrl);
             return new ResponseEntity<>(
-                new UrlMappingPojo().withShortUrl(qualifiedShortUrl).withLongUrl(longUrl)
+                new UrlMappingPojo().withShortUrl(shortUrl).withLongUrl(longUrl)
                     .withMessage("success").witHttpStatusCode(HttpStatus.OK),
                 HttpStatus.OK);
 
@@ -93,6 +89,15 @@ public class TinyUrlRestController {
         }
     }
 
+    /**
+     * Converts the alpha-numeric short URL (string) to id (number) using a bijective function.
+     * Lookup mapping for this id in DB (id <-> long URL).
+     * Returns the long URL.
+     *
+     * @param shortUrl          a path variable. Short URL to be resolved, must've been created using POST earlier.
+     * @param userCorrelationId optional header, used for traceability
+     * @return An existing mapping corresponding to the shortUrl, if it exists. 404 otherwise.
+     */
     @GetMapping(path = "/tinyurl/{shortUrl}")
     public ResponseEntity<UrlMappingPojo> resolveTinyurl(@PathVariable String shortUrl,
                                                          @RequestHeader(value = "X-Correlation-Id", required = false)
@@ -105,7 +110,8 @@ public class TinyUrlRestController {
             UrlMapping resolvedUrlMapping = repository.findById(id).orElse(null);
             if (null == resolvedUrlMapping) {
                 logger.warn("no mapping found for shortUrl: {}, id: {} in DB.", shortUrl, id);
-                String errMsg = String.format("No mapping found for shortUrl: %s. Did you create a mapping?", shortUrl);
+                String errMsg =
+                    String.format("No mapping found for shortUrl: '%s'. Did you create a mapping?", shortUrl);
                 return new ResponseEntity<>(
                     new UrlMappingPojo().withShortUrl(shortUrl).withMessage(errMsg)
                         .witHttpStatusCode(HttpStatus.NOT_FOUND),
@@ -113,11 +119,11 @@ public class TinyUrlRestController {
             }
             logger.info("resolved to: resolvedUrlMapping: {}", resolvedUrlMapping);
             return new ResponseEntity<>(
-                new UrlMappingPojo().withLongUrl(resolvedUrlMapping.getLongUrl()).withShortUrl(shortUrl),
+                new UrlMappingPojo().withLongUrl(resolvedUrlMapping.getLongUrl()).withShortUrl(shortUrl)
+                    .withMessage("success").witHttpStatusCode(HttpStatus.OK),
                 HttpStatus.OK);
         } catch (Exception e) {
             logger.error("Unexpected exception handling shortUrl: '{}'", shortUrl, e);
-            // FIXME: If a correlation id is part of every bug report, it makes it easier to debug.
             return new ResponseEntity<>(
                 new UrlMappingPojo()
                     .withMessage("An unexpected error occurred. If problem persists, please contact support." +
